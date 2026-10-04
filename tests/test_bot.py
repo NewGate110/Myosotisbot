@@ -84,6 +84,45 @@ class LoggingTests(unittest.TestCase):
 
 
 class AccessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_personal_upload_size_validation_reset_and_access(self):
+        ctx = context()
+        state = ctx.application.bot_data["state"]
+        ctx.args = ["20"]
+        await bot.handle_upload_size(update(user_id=43), ctx)
+        self.assertEqual(state.upload_preferences, {43: 20_000_000})
+        for args in (["0"], ["-1"], ["46"], ["20.5"], ["bad"], ["20", "30"]):
+            ctx.args = args
+            await bot.handle_upload_size(update(user_id=43), ctx)
+            self.assertEqual(state.upload_preferences, {43: 20_000_000})
+        ctx.args = []
+        request = update(user_id=43)
+        await bot.handle_upload_size(request, ctx)
+        self.assertIn("20 MB", request.message.reply_text.call_args.args[0])
+        ctx.args = ["10"]
+        denied = update(99, 99, "private")
+        await bot.handle_upload_size(denied, ctx)
+        denied.message.reply_text.assert_not_awaited()
+        self.assertNotIn(99, state.upload_preferences)
+        ctx.args = ["reset"]
+        await bot.handle_upload_size(update(user_id=43), ctx)
+        self.assertEqual(state.upload_preferences, {})
+
+    async def test_personal_limit_reaches_conversion_and_upload_for_all_formats(self):
+        for mode in ("mp4", "gif", "audio"):
+            ctx = context()
+            state = ctx.application.bot_data["state"]
+            state.upload_preferences[42] = 20_000_000
+            key = "a" * 32
+            state.pending[key] = bot.PendingLink("url", -10042, 42, time.monotonic(), 5)
+            request = update(key=key)
+            request.callback_query.data = f"{mode}:{key}"
+            with patch.object(bot, "media_with_status", new_callable=AsyncMock) as worker, \
+                    patch.object(bot, "upload_media", new_callable=AsyncMock) as upload:
+                await bot.handle_button(request, ctx)
+            self.assertEqual(worker.call_args.args[3].upload_bytes, 20_000_000)
+            self.assertEqual(upload.call_args.args[4], 20_000_000)
+            self.assertEqual(state.settings.limits.upload_bytes, 45_000_000)
+
     async def test_processing_reply_precedes_delayed_menu(self):
         ctx = context()
         request = update()

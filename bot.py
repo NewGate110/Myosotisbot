@@ -11,13 +11,13 @@ import sys
 import tempfile
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from urllib.parse import quote
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from media import MediaError, OUTPUT_FILES, directory_size
 from links import InvalidLink, message_url, normalize_url
@@ -65,6 +65,7 @@ class BotState:
         self.settings = settings
         self.pending = {}
         self.active = 0
+        self.upload_preferences = {}
 
     def expire(self):
         cutoff = time.monotonic() - 900
@@ -78,6 +79,30 @@ def authorized(update, settings):
     if chat.type == "private":
         return user.id == settings.owner_id and chat.id == settings.owner_id
     return chat.type in ("group", "supergroup") and chat.id == settings.group_id
+
+
+async def handle_upload_size(update, context):
+    state = context.application.bot_data["state"]
+    if not authorized(update, state.settings) or update.message is None:
+        return
+    user_id = update.effective_user.id
+    maximum = state.settings.limits.upload_bytes
+    args = context.args or []
+    if args == ["reset"]:
+        state.upload_preferences.pop(user_id, None)
+    elif args:
+        if len(args) != 1 or not re.fullmatch(r"[0-9]{1,2}", args[0]) or not 0 < int(args[0]) * 1_000_000 <= maximum:
+            await update.message.reply_text(
+                f"Use /uploadsize with a positive whole number of MB up to {maximum / 1_000_000:g}, "
+                "or /uploadsize reset.")
+            return
+        state.upload_preferences[user_id] = int(args[0]) * 1_000_000
+    selected = state.upload_preferences.get(user_id, maximum)
+    await update.message.reply_text(
+        f"Your upload limit: {selected / 1_000_000:g} MB. "
+        f"Maximum: {maximum / 1_000_000:g} MB.\n"
+        "Set it with /uploadsize 20 or restore the default with /uploadsize reset. "
+        "Applies to future jobs for all formats; resets when the bot restarts.")
 
 
 async def handle_link(update, context):
@@ -210,17 +235,20 @@ async def handle_button(update, context):
     # Reserve before awaiting: concurrent callbacks cannot consume the same job.
     state.pending.pop(key)
     state.active += 1
+    limits = replace(state.settings.limits, upload_bytes=min(
+        state.upload_preferences.get(pending.user_id, state.settings.limits.upload_bytes),
+        state.settings.limits.upload_bytes))
     progress = TelegramProgress(query, mode)
     try:
         await query.answer()
         async with progress:
             with tempfile.TemporaryDirectory(prefix="telegram-media-") as directory:
-                output = await media_with_status(pending.url, mode, directory, state.settings.limits, query,
+                output = await media_with_status(pending.url, mode, directory, limits, query,
                                                  status=progress.data)
                 progress.data.clear()
                 progress.data["phase"] = "Uploading"
                 await upload_media(
-                    context.bot, output, mode, pending.chat_id, state.settings.limits.upload_bytes,
+                    context.bot, output, mode, pending.chat_id, limits.upload_bytes,
                     thread_id=getattr(query.message, "message_thread_id", None), progress=progress.data,
                 )
         if not await progress.complete():
@@ -253,6 +281,7 @@ def main():
     app = (Application.builder().token(settings.token).concurrent_updates(16)
            .connect_timeout(30).read_timeout(180).write_timeout(180).pool_timeout(30).build())
     app.bot_data["state"] = BotState(settings)
+    app.add_handler(CommandHandler("uploadsize", handle_upload_size))
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION) & ~filters.COMMAND, handle_link))
     app.add_handler(CallbackQueryHandler(handle_button))
     app.add_error_handler(handle_error)

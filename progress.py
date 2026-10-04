@@ -11,18 +11,18 @@ from pathlib import Path
 from telegram.error import BadRequest, RetryAfter
 
 PHASES = {
-    "Starting": (0, "🔎", "Checking link"),
-    "Downloading": (0, "📥", "Downloading"),
-    "Checking media": (1, "🔎", "Checking media"),
-    "Merging streams": (1, "⚙️", "Merging video and audio"),
-    "Preparing MP4": (1, "⚙️", "Preparing MP4"),
-    "Converting GIF": (1, "⚙️", "Creating GIF"),
-    "Extracting audio": (1, "🎵", "Extracting audio"),
-    "Uploading": (2, "📤", "Uploading"),
-    "Confirming": (2, "📤", "Waiting for Telegram"),
-    "Retrying": (2, "⏳", "Waiting to retry upload"),
-    "Complete": (3, "✅", "Delivered"),
-    "Failed": (None, "⚠️", "Request stopped"),
+    "Starting": (0, "Checking link"),
+    "Downloading": (0, "Downloading"),
+    "Checking media": (1, "Checking media"),
+    "Merging streams": (1, "Merging video and audio"),
+    "Preparing MP4": (1, "Preparing MP4"),
+    "Converting GIF": (1, "Creating GIF"),
+    "Extracting audio": (1, "Extracting audio"),
+    "Uploading": (2, "Uploading"),
+    "Confirming": (2, "Waiting for Telegram"),
+    "Retrying": (2, "Waiting to retry upload"),
+    "Complete": (3, "Delivered"),
+    "Failed": (None, "Request stopped"),
 }
 
 

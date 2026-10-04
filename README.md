@@ -54,6 +54,16 @@ the token, replace it through BotFather and update `.env`.
 
 ## Access and usage
 
+- Use `/uploadsize 20` to set your personal output size cap in decimal MB for
+  MP4, GIF, and MP3. `/uploadsize` shows your setting; `/uploadsize reset`
+  restores the configured default. Choose a positive whole number up to
+  `MAX_UPLOAD_BYTES` (45 MB by default). The preference applies when a job
+  starts, is shared across your authorized chats, and resets on bot restart.
+  It never changes another user's limit or an already-running job. Smaller
+  caps may reduce quality or cause a file to be rejected.
+  Telegram's hosted Bot API documents a 50 MB upload limit; this bot retains
+  a conservative 49 MB configuration ceiling.
+
 - All human members may submit links in the configured group. Only the owner
   may use the bot in a private chat. Messages elsewhere are silently ignored,
   including the owner's messages in other groups. Channels are unsupported.
