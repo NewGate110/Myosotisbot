@@ -71,7 +71,7 @@ class MediaTests(unittest.TestCase):
     def test_ytdlp_uses_actual_merged_file(self):
         with patch.object(media.yt_dlp, "YoutubeDL") as factory:
             downloader = factory.return_value.__enter__.return_value
-            downloader.extract_info.return_value = {"duration": 2}
+            downloader.extract_info.return_value = {"duration": 2, "title": "My video title"}
             merged = self.root / "source/source.mkv"
             def download(*args, **kwargs):
                 merged.write_bytes(b"merged media")
@@ -79,6 +79,7 @@ class MediaTests(unittest.TestCase):
             downloader.process_ie_result.side_effect = download
             downloader.prepare_filename.return_value = str(self.root / "source/source.webm")
             self.assertEqual(media.download_ytdlp("url", self.budget), merged)
+            self.assertEqual(self.budget.source_title, "My video title")
 
     def test_non_x_failure_never_uses_gallery_fallback(self):
         with patch.object(media, "download_ytdlp", side_effect=media.yt_dlp.utils.DownloadError("failed")), \

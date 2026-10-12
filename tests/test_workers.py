@@ -73,6 +73,19 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_worker_deadline_stops_process(self):
         await self.run_fake_worker("time.sleep(60)\n", replace(Limits(), job_seconds=1), "timeout")
 
+    async def test_audio_worker_returns_title_filename(self):
+        await self.run_fake_worker(
+            "(root / 'My video title.mp3').write_bytes(b'test')\n"
+            "print(json.dumps({'ok': True, 'filename': 'My video title.mp3'}), flush=True)\n",
+            Limits(), mode="audio",
+        )
+
+    async def test_worker_rejects_output_outside_job_directory(self):
+        await self.run_fake_worker(
+            "print(json.dumps({'ok': True, 'filename': '../outside.mp3'}), flush=True)\n",
+            Limits(), "invalid_media", mode="audio",
+        )
+
     async def test_worker_temp_limit_stops_process(self):
         await self.run_fake_worker("(root / 'large').write_bytes(b'x' * 1000)\ntime.sleep(60)\n",
                                    replace(Limits(), temp_bytes=100), "temp_limit")

@@ -3,6 +3,8 @@
 Accepts video links through yt-dlp, offers GIF, MP4 or Audio (MP3), and uploads validated media. Access
 is restricted to one group and the owner's private chat. MP4 output uses H.264
 video, yuv420p pixels, AAC audio when present, and fast-start metadata.
+Audio downloads use the video's title as the MP3 filename, with unsafe filename
+characters replaced. Sources without a title fall back to `output.mp3`.
 
 ## Setup
 

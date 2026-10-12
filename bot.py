@@ -192,7 +192,14 @@ async def run_media_worker(url, mode, directory, limits, status):
         result = json.loads(stdout)
         if "error" in result:
             raise MediaError(result["error"])
-        output = Path(directory) / OUTPUT_FILES[mode]
+        filename = result.get("filename", OUTPUT_FILES[mode])
+        if (not isinstance(filename, str) or not filename or "/" in filename or "\\" in filename
+                or Path(filename).name != filename
+                or Path(filename).suffix != Path(OUTPUT_FILES[mode]).suffix):
+            raise MediaError("invalid_media")
+        output = Path(directory) / filename
+        if output.resolve().parent != Path(directory).resolve():
+            raise MediaError("invalid_media")
         if not output.is_file() or not 0 < output.stat().st_size <= limits.upload_bytes:
             raise MediaError("upload_limit")
         return output

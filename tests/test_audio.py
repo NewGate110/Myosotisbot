@@ -148,7 +148,39 @@ class AudioProcessingTests(unittest.TestCase):
                 media.prepare_audio(self.root / "source.mp4", self.budget, self.info)
 
 
+class AudioFilenameTests(unittest.TestCase):
+    def test_pipeline_names_audio_from_title_and_handles_unsafe_or_missing_titles(self):
+        cases = [("My video title", "My video title.mp3"),
+                 ("../song: live?", "_song - live.mp3"),
+                 ("CON", "CON_.mp3"), (None, "output.mp3"),
+                 ("   ", "output.mp3"), ("音" * 200, "音" * 60 + ".mp3")]
+        for title, expected in cases:
+            with self.subTest(title=title), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                def download(url, budget):
+                    budget.source_title = title
+                    return root / "source.mp4"
+                output = root / "output.mp3"
+                output.write_bytes(b"audio")
+                with patch.object(media, "download", side_effect=download), \
+                        patch.object(media, "probe", return_value=(fake_probe(), {}, 2)), \
+                        patch.object(media, "prepare_audio", return_value=output):
+                    result = media.process_media("https://example.com/video", "audio", root, Limits())
+                self.assertEqual(result.name, expected)
+                self.assertEqual(result.read_bytes(), b"audio")
+                self.assertEqual(result.parent, root)
+
+
 class AudioUploadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_title_filename_reaches_telegram_with_progress(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "My video title.mp3"
+            path.write_bytes(b"audio")
+            client = NS(send_audio=AsyncMock(return_value=NS(
+                chat_id=42, message_id=1, audio=NS(file_id="audio"))))
+            await uploads.upload_media(client, path, "audio", 42, 1000, progress={})
+            self.assertEqual(client.send_audio.call_args.kwargs["audio"].filename, path.name)
+
     async def test_audio_retry_confirmation_and_stream_cleanup(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "output.mp3"

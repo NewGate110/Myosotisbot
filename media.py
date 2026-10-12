@@ -61,6 +61,7 @@ class Budget:
         self.limits = limits
         self.deadline = time.monotonic() + limits.job_seconds
         self.downloaded = 0
+        self.source_title = None
         self.per_file = {}
         self.violation = None
         self.progress = {"phase": "Starting"}
@@ -193,6 +194,7 @@ def download_ytdlp(url, budget):
         validate_metadata(info, budget)
         budget.check()
         result = downloader.process_ie_result(info, download=True)
+        budget.source_title = result.get("title") or info.get("title")
         validate_metadata({k: v for k, v in result.items() if k not in ("filesize", "filesize_approx", "requested_formats")}, budget)
         paths += [Path(item["filepath"]) for item in result.get("requested_downloads", []) if item.get("filepath")]
         if result.get("filepath"):
@@ -416,6 +418,13 @@ def process_media(url, mode, root, limits):
         result = prepare_gif(source, budget, duration=info[2])
     elif mode == "audio":
         result = prepare_audio(source, budget, info)
+        if isinstance(budget.source_title, str) and budget.source_title.strip():
+            name = yt_dlp.utils.sanitize_filename(budget.source_title, restricted=False, is_id=False)
+            # Leave room for the extension on filesystems with byte-based limits.
+            name = name.encode("utf-8")[:180].decode("utf-8", errors="ignore").strip(" .")
+            if name:
+                filename = yt_dlp.utils.sanitize_path(f"{name}.mp3", force=True)
+                result = result.rename(budget.root / filename)
     else:
         result = prepare_mp4(source, budget, info)
     budget.check()
@@ -428,8 +437,8 @@ def worker_main():
     try:
         limits = Limits(**json.loads(sys.stdin.buffer.read()))
         with contextlib.redirect_stdout(sys.stderr):
-            process_media(sys.argv[1], sys.argv[2], Path(sys.argv[3]), limits)
-        result = {"ok": True}
+            output = process_media(sys.argv[1], sys.argv[2], Path(sys.argv[3]), limits)
+        result = {"ok": True, "filename": output.name}
     except MediaError as exc:
         result = {"error": exc.code}
     except Exception:
